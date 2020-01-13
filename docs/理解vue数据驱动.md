@@ -3,12 +3,12 @@
 vue是双向数据绑定的框架，数据驱动是他的灵魂，他的实现原理众所周知是Object.defineProperty方法实现的get、set重写，但是这样说太牵强外门了。本文将宏观介绍他的实现
 
 + [使用vue](#使用vue)
-+ [分析Object.defineProperty](#分析Object.defineProperty)
++ [分析Object.defineProperty](#分析ObjectdefineProperty)
 + [简单的源码解析](#简单的源码解析)
     + [一切从头开始](#一切从头开始)
     + [数据驱动部分-观察者](#数据驱动部分-观察者)
     + [vue挂载到dom](#vue挂载到dom)
-    + [简述Watcher](#简述Watcher)
+    + [简述Watcher](#简述watcher)
     + [从宏观角度看问题](#从宏观角度看问题)
 + [通过案例进行分析](#通过案例进行分析)
     + [vue数据驱动的前提](#vue数据驱动的前提)

@@ -6,8 +6,8 @@ vue的view render是虚拟dom到真实dom的过程，虚拟dom的存在是为了
 + [vue更新监听](#vue更新监听)
 + [更新view](#更新view)
     + [patch函数](#patch函数)
-    + [patchVnode函数](#patchVnode函数)
-    + [updateChildren函数](#updateChildren函数)
+    + [patchVnode函数](#patchvnode函数)
+    + [updateChildren函数](#updatechildren函数)
 + [结尾](#结尾)
 
 ## view更新原理

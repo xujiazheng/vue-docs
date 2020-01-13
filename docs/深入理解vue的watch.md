@@ -12,8 +12,8 @@ vue中的wactch可以监听到data的变化，执行定义的回调，在某些�
     + [传值对象的其他作用](#传值对象的其他作用)
 + [源码分析watch](#源码分析watch)
     + [初始watch](#初始watch)
-    + [创建Watcher](#创建Watcher)
-    + [watchWatcher](#watchWatcher)
+    + [创建Watcher](#创建watcher)
+    + [watchWatcher](#watchwatcher)
     + [立即执行的watch](#立即执行的watch)
 + [与computed比较](#与computed比较)
 
