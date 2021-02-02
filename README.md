@@ -6,3 +6,4 @@ vue version: v2.5.17
 + [computed实现原理](./docs/Vue计算属性computed的原理.md)
 + [深入理解vue的watch](./docs/深入理解vue的watch.md)
 + [vue虚拟dom渲染](./docs/vue虚拟dom渲染.md)
++ [深度解析v-model的原理](./docs/深度解析v-model的原理.md)
