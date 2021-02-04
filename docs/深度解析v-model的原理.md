@@ -33,6 +33,7 @@
   + [invokeCreateHooks函数](#invokeCreateHooks函数)
   + [cbs的真相](#cbs的真相)
   + [events事件注册](#events事件注册)
++ [总结v-model的实现原理](#总结v-model的实现原理)
 + [结尾](#结尾)
 
 
