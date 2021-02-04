@@ -16,28 +16,30 @@
 <input :value="msg" @input="handleChangeMsg" />
 
 ```
-
 其实事实也是这样，后续源码分析会以事实论证。
 
-+ [一切从源头开始讲起](#一切从源头开始讲起)
-  + [Vue初始化](#Vue初始化)
-  + [render函数的构建](#render函数的构建)
-    + [compileToFunctions函数](#compileToFunctions函数)
-    + [createCompilerCreator函数](#createCompilerCreator函数)
-    + [ast树生成render函数体](#ast树生成render函数体)
-    + [小结](#小结)
-  + [VNode生成真实DOM](#VNode生成真实DOM)
-    + [createPatchFunction高阶函数](#createPatchFunction高阶函数)
-    + [patch函数重心](#patch函数重心)
-    + [createElm函数生成真实Dom](#createElm函数生成真实Dom)
-    + [createElement$1返回真实Dom](#createElement$1返回真实Dom)
-    + [invokeCreateHooks函数](#invokeCreateHooks函数)
-    + [patchVnode函数diff更新](#patchVnode函数diff更新)
+## 目录
+
++ [一切从案例开始](#一切从案例开始)
++ [Vue初始化](#Vue初始化)
++ [render函数的构建](#render函数的构建)
+  + [compileToFunctions函数](#compileToFunctions函数)
+  + [createCompilerCreator函数](#createCompilerCreator函数)
+  + [ast树生成render函数体](#ast树生成render函数体)
+  + [小结](#小结)
++ [VNode生成真实DOM](#VNode生成真实DOM)
+  + [patch函数重心](#patch函数重心)
+  + [createElm函数生成真实Dom](#createElm函数生成真实Dom)
+  + [invokeCreateHooks函数](#invokeCreateHooks函数)
+  + [cbs的真相](#cbs的真相)
+  + [events事件注册](#events事件注册)
++ [结尾](#结尾)
 
 
-## 一切从源头开始讲起
 
-讲解示例：
+### 一切从案例开始
+
+本文有些地方，会以以下示例来输出案例
 
 ```
 # html
@@ -407,6 +409,312 @@ Vue.prototype._update = function (vnode, hydrating) {
 
 主要逻辑如上，_update时，判断是否有VNode，如果没有，则进行第一次渲染，如果有，则update，最终执行的都是`__patch__`函数，下面进入正题。
 
-#### createPatchFunction高阶函数
+#### patch函数重心
 
-----------未完-------
+patch函数是由`createPatchFunction`函数执行返回的函数，`createPatchFunction`函数本身包含了许多工具方法等内容，非常繁琐，这里不赘述，后面只讲述主线相关内容。
+
+直接看return的`patch`方法.
+
+```
+function patch (oldVnode, vnode, hydrating, removeOnly) {
+  // 如果传入新节vnode不存在，则注销vnode
+  if (isUndef(vnode)) {
+    if (isDef(oldVnode)) { invokeDestroyHook(oldVnode); }
+    return
+  }
+
+  var isInitialPatch = false;
+  var insertedVnodeQueue = [];
+  // 案例中，总会执行else， if这里是在$mount不指定dom情况下才会执行；
+  if (isUndef(oldVnode)) {
+    isInitialPatch = true;
+    createElm(vnode, insertedVnodeQueue);
+  } else {
+    // 判断oldVnode是真实Dom还是Vnode
+    var isRealElement = isDef(oldVnode.nodeType);
+    // 如果是Vnode并且新老Vnode相似，则执行patchVnode；
+    // 如果新老Vnode不相似，走else，根据新Vnode创建dom
+    // 如果isRealElement为true（oldVnode是真实dom），意味着初次执行patch，因此根据Vnode创建dom
+    if (!isRealElement && sameVnode(oldVnode, vnode)) {
+      patchVnode(oldVnode, vnode, insertedVnodeQueue, removeOnly);
+    } else {
+      // 如果oldVnode是真实dom， 将一个空的Vnode赋值给oldVnode，此为初始化
+      if (isRealElement) {
+        oldVnode = emptyNodeAt(oldVnode);
+      }
+
+      var oldElm = oldVnode.elm;
+      var parentElm = nodeOps.parentNode(oldElm);
+      
+      // 根据Vnode创建dom
+      createElm(
+        vnode,
+        insertedVnodeQueue,
+        oldElm._leaveCb ? null : parentElm,
+        nodeOps.nextSibling(oldElm)
+      );
+      // 省略后续父组件处理逻辑和注销老组件逻辑
+    }
+  }
+
+  return vnode.elm
+}
+
+```
+
+在patch方法中，经过一系列的判断，可以看出，当第一次渲染页面，执行了createElm，创建真实dom；在后续的渲染，都会走patchVnode方法进行更新。
+其实patchVnode函数中做了对Vnode不同场景的不同更新方式.
+[vue虚拟dom渲染](./vue虚拟dom渲染.md)中也简单介绍了其中的流程，这里再做介绍，直接看`createElm`方法
+
+
+#### createElm函数生成真实Dom
+
+
+简化后的函数如下：
+```
+function createElm (
+  vnode,
+  insertedVnodeQueue,
+  parentElm,
+  refElm
+) {
+  // 如果vnode是component，会执行createComponent并返回true，终止createElm函数；
+  if (createComponent(vnode, insertedVnodeQueue, parentElm, refElm)) {
+    return
+  }
+  var data = vnode.data;
+  var children = vnode.children;
+  var tag = vnode.tag;
+  if (isDef(tag)) {
+    // 创建真实dom
+    vnode.elm = vnode.ns
+      ? nodeOps.createElementNS(vnode.ns, tag)
+      : nodeOps.createElement(tag, vnode);
+    // style scope的处理
+    setScope(vnode);
+    {
+      // 递归创建子节点，createChildren中也会调用createElm形成递归
+      createChildren(vnode, children, insertedVnodeQueue);
+      
+      if (isDef(data)) {
+        // create相关钩子注册， v-model指令vue默认行为的input事件就是在这里注册的
+        invokeCreateHooks(vnode, insertedVnodeQueue);
+      }
+      insert(parentElm, vnode.elm, refElm);
+    }
+  } else if (isTrue(vnode.isComment)) {
+    // 注释节点创建
+    vnode.elm = nodeOps.createComment(vnode.text);
+    insert(parentElm, vnode.elm, refElm);
+  } else {
+    // 文本节点创建
+    vnode.elm = nodeOps.createTextNode(vnode.text);
+    insert(parentElm, vnode.elm, refElm);
+  }
+}
+```
+可以看出，在`createElm`函数中，真正创建了dom并切缓存到了`vnode.elm`中去；
+`createChildren`函数会将子节点递归遍历调用`createElm`从而达到生成所有层级dom的效果；`invokeCreateHooks`函数则是执行所有的create相关的钩子事件;
+
+#### invokeCreateHooks函数
+
+函数内容如下：
+
+```
+function invokeCreateHooks (vnode, insertedVnodeQueue) {
+    for (var i$1 = 0; i$1 < cbs.create.length; ++i$1) {
+      cbs.create[i$1](emptyNode, vnode);
+    }
+    i = vnode.data.hook; // Reuse variable
+    if (isDef(i)) {
+      if (isDef(i.create)) { i.create(emptyNode, vnode); }
+      if (isDef(i.insert)) { insertedVnodeQueue.push(vnode); }
+    }
+  }
+
+```
+
+这个函数内容不多，因为它只是负责创建，至于创建的内容完全不在乎，只看这个函数看不到任何价值，因此首先要搞懂`cbs`是干什么用的；
+
+#### cbs的真相
+
+在`createPatchFunction`函数最开始，就有这一段代码：
+
+```
+var i, j;
+var cbs = {};
+
+var modules = backend.modules;
+var nodeOps = backend.nodeOps;
+
+for (i = 0; i < hooks.length; ++i) {
+  cbs[hooks[i]] = [];
+  for (j = 0; j < modules.length; ++j) {
+    if (isDef(modules[j][hooks[i]])) {
+      cbs[hooks[i]].push(modules[j][hooks[i]]);
+    }
+  }
+}
+```
+可以看出在这里，生成了`cbs`，但是具体是干嘛的，还需要看`backend.modules`和`hooks`的内容，`hooks`很简单，是源码中定义的一个数组如下：
+
+```
+var hooks = ['create', 'activate', 'update', 'remove', 'destroy'];
+```
+`backend.modules`则是一组工具对象，包括如下：
+
+```
+var baseModules = [
+  ref,
+  directives
+]
+
+var platformModules = [
+  attrs,
+  klass,
+  events,
+  domProps,
+  style,
+  transition
+]
+
+var modules = platformModules.concat(baseModules);
+
+var patch = createPatchFunction({ nodeOps: nodeOps, modules: modules });
+
+```
+可以去看一下每一个对象的内容，每个对象包含着`create`, `update`等包含于`hooks`数组的方法，类似于:
+
+```
+// 接口
+interface BaseModule {
+  create?: function;
+  update?: function;
+  activate?: function;
+  remove?: function;
+  destroy?: function;
+}
+
+// 声明ref
+const ref: BaseModule = {
+  create(_, vnode) {
+    registerRef(vnode);
+  }
+  update(oldVnode, vnode) {
+    updateRef(oldVnode, vnode);
+  }
+}
+// 声明attrs
+const attrs: BaseModule = {
+  create(_, vnode) {
+    createAttrs(vnode);
+  }
+}
+
+```
+以上是伪代码，只是代表一个意思，可以看出，所有的module只能包含`hooks`中的方法名，可以没有某一些方法，比如只包含`create`和`update`方法；
+看到这种结构，回到本节刚开始的代码，仔细阅读可以发现，`cbs`是一个集合，是一个包含了`hooks`的几种钩子的集合，最终的结构如下：
+
+```
+cbs = {
+  create: [ref.create, attrs.create...],
+  update: [],
+  activate: [],
+  remove: [],
+  destory: []
+}
+
+```
+每一种钩子都包含了所有module的对应的方法；
+
+所以，回到`invokeCreateHooks`方法中
+
+```
+cbs.create[i$1](emptyNode, vnode);
+```
+以上语句则是把所有module的create钩子执行一遍，将vnode传递进入，具体该如何执行，是module自己的事情了。
+
+为了探究`v-model`指令，vue做了什么，我们去看一下`events`中的逻辑：
+
+#### events事件注册
+
+```
+// 钩子函数执行了此函数
+function updateDOMListeners (oldVnode, vnode) {
+  // 如果vnode中没有on，也就是没有定义事件，则不处理
+  if (isUndef(oldVnode.data.on) && isUndef(vnode.data.on)) {
+    return
+  }
+  var on = vnode.data.on || {};
+  var oldOn = oldVnode.data.on || {};
+  // createElm章节说到，vnode.elm是创建的真实dom
+  target$1 = vnode.elm;
+  // 兼容性处理，如兼容ie的事件处理
+  normalizeEvents(on);
+  // 处理函数主体
+  updateListeners(on, oldOn, add$1, remove$2, vnode.context);
+  target$1 = undefined;
+}
+// events的钩子函数
+var events = {
+  create: updateDOMListeners,
+  update: updateDOMListeners
+}
+
+```
+
+根据上面我们看出，`updateListeners`函数就是处理函数的主体，来看一下
+
+```
+function updateListeners (
+  on,
+  oldOn,
+  add,
+  remove$$1,
+  vm
+) {
+  var name, def, cur, old, event;
+  for (name in on) {
+    def = cur = on[name];
+    old = oldOn[name];
+    event = normalizeEvent(name);
+    if (isUndef(old)) {
+      if (isUndef(cur.fns)) {
+        //高阶函数，返回的依旧是是事件处理函数
+        cur = on[name] = createFnInvoker(cur);
+      }
+      // 给dom添加事件
+      add(event.name, cur, event.once, event.capture, event.passive, event.params);
+    } else if (cur !== old) {
+      old.fns = cur;
+      on[name] = old;
+    }
+  }
+  // 清除旧的dom的事件处理函数
+  for (name in oldOn) {
+    if (isUndef(on[name])) {
+      event = normalizeEvent(name);
+      remove$$1(event.name, oldOn[name], event.capture);
+    }
+  }
+}
+
+```
+`updateListeners`方法也很简单，就是给dom注册事件，给旧的dom删除事件，具体dom注册事件在add$1方法，具体可以自己去看；
+
+
+### 总结v-model的实现原理
+
+通过源码阅读，v-model并没有那么神奇了，根据源码大致讲述一下原理如下：
+
+1. Vue在实例化时，会根据模板生成的ast树，递归遍历处理，在处理过程中，会将含有`v-model`指令的ast节点进行加工，根据不同的类型，执行不同的逻辑处理， `v-model`为例，最终在render函数体中增加value和input事件的描述，其中input事件会将最新输入内容赋值给绑定的属性，本案例中为`msg`；
+2. Vue执行render函数获取到Vnode虚拟DOM，并在mounted阶段，执行patch方法，进入createElm函数创建真实dom；
+3. 在创建真实dom过程中，会执行所有modules的create钩子处理函数，其中就有events模块的create钩子，该钩子函数中，会将vnode虚拟dom的事件描述进行绑定，也就是前面的input事件；
+4. 最终，在我们改变输入框内容时，出发了input事件，input事件中，修改了我们绑定的`msg`属性，根据vue的数据驱动原理，修改了data属性，则会重新绘制页面，因此最终，`v-model`的功能完成了。
+
+
+### 结尾
+
+* vue版本v2.5.17-beta.0
+* 本文在针对v-model的实现，进行了一整条链路的源码分析，帮助你阅读源码
+* 本文涉及到的部分有数据驱动部分、虚拟dom渲染部分不进行过多描述，详情可以观看相关文章
