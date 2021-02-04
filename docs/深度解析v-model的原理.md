@@ -710,7 +710,7 @@ function updateListeners (
 
 1. Vue在实例化时，会根据模板生成的ast树，递归遍历处理，在处理过程中，会将含有`v-model`指令的ast节点进行加工，根据不同的类型，执行不同的逻辑处理， `v-model`为例，最终在render函数体中增加value和input事件的描述，其中input事件会将最新输入内容赋值给绑定的属性，本案例中为`msg`；
 2. Vue执行render函数获取到Vnode虚拟DOM，并在mounted阶段，执行patch方法，进入createElm函数创建真实dom；
-3. 在创建真实dom过程中，会执行所有modules的create钩子处理函数，其中就有events模块的create钩子，该钩子函数中，会将vnode虚拟dom的事件描述进行绑定，也就是前面的input事件；
+3. 在创建真实dom过程中，会执行所有modules的create钩子处理函数，其中就有events模块的create钩子，该钩子函数中，会将vnode虚拟dom的事件描述进行真实dom绑定，也就是前面的input事件；
 4. 最终，在我们改变输入框内容时，出发了input事件，input事件中，修改了我们绑定的`msg`属性，根据vue的数据驱动原理，修改了data属性，则会重新绘制页面，因此最终，`v-model`的功能完成了。
 
 
