@@ -158,7 +158,7 @@ updateChildren函数采用了递归处理方法，vnode相似的情况下，继�
 接下来看详细的源码内容
 ### diff算法详解
 先看代码解析，然后再进行具体分析
-```
+```javascript
 function updateChildren (parentElm, oldCh, newCh, insertedVnodeQueue, removeOnly) {
   var oldStartIdx = 0; // oldCh的开始坐标
   var newStartIdx = 0; // newCh的开始坐标
